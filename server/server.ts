@@ -282,3 +282,18 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// app/api/extract/route.ts
+import { NextResponse } from "next/server";
+// Removed duplicate import of OpenAI
+
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function POST(req: Request) {
+  const { text } = await req.json();
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: text }],
+  });
+  return NextResponse.json(completion.choices[0].message);
+}
