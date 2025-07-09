@@ -3,13 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:next\" \"npm run dev:server\"",
-    "dev:next": "next dev",
-    "dev:server": "nodemon --exec ts-node server/server.ts",
+    "dev": "next dev",
     "build": "next build",
-    "start": "NODE_ENV=production concurrently \"npm run start:next\" \"npm run start:server\"",
-    "start:next": "next start",
-    "start:server": "ts-node server/server.ts"
+    "start": "next start"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",
