@@ -287,7 +287,7 @@ app.listen(PORT, () => {
 import { NextResponse } from "next/server";
 // Removed duplicate import of OpenAI
 
-const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_KEY });
 
 export async function POST(req: Request) {
   const { text } = await req.json();
