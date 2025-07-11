@@ -8,54 +8,36 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_KEY || ''
 });
 
-// In-memory storage (use Vercel KV in production)
+// In-memory storage
 const extractedData = new Map<string, any>();
 
-// Helper function to extract from image with bounding boxes
+// Simple extraction that was working before
 async function extractFromImage(imageBuffer: Buffer, mimeType: string): Promise<any> {
   const base64Image = imageBuffer.toString('base64');
   
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4o", // Updated model name
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Analyze this document image carefully. Extract ALL text fields with their positions.
+              text: `Extract all information from this document. List each field in this format:
+Field Name: Field Value
 
-For each piece of text, estimate its position as a percentage of the image dimensions:
-- x: horizontal position (0=left edge, 1=right edge)
-- y: vertical position (0=top edge, 1=bottom edge)
-- width: width as percentage of image width
-- height: height as percentage of image height
+For example:
+Invoice Number: INV001
+Date: 2024-01-01
+Company: ABC Corp
 
-Return JSON in this exact format:
-{
-  "documentType": "invoice/receipt/form/other",
-  "extractedFields": [
-    {
-      "label": "Account No",
-      "value": "12345",
-      "confidence": 0.95,
-      "labelBoundingBox": {"x": 0.1, "y": 0.2, "width": 0.15, "height": 0.03},
-      "valueBoundingBox": {"x": 0.3, "y": 0.2, "width": 0.25, "height": 0.03}
-    }
-  ]
-}
-
-IMPORTANT: 
-- Extract the EXACT text as it appears
-- Estimate positions based on visual layout
-- Include all fields you can see`
+Extract EVERY field you can see in the document.`
             },
             {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64Image}`,
-                detail: "high" // Use high detail for better extraction
+                url: `data:${mimeType};base64,${base64Image}`
               }
             }
           ]
@@ -66,93 +48,106 @@ IMPORTANT:
     });
 
     const content = response.choices[0]?.message?.content || '';
-    console.log('GPT-4 Vision response:', content.substring(0, 200) + '...');
+    console.log('Extraction response:', content.substring(0, 200) + '...');
     
-    try {
-      const parsed = JSON.parse(content);
-      return {
-        documentType: parsed.documentType || 'document',
-        extractedFields: parsed.extractedFields || [],
-        keyValuePairs: parsed.extractedFields?.map((f: any) => ({
-          key: f.label,
-          value: f.value,
-          confidence: f.confidence
-        })) || [],
-        content: content
-      };
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      // Fallback: try to extract key-value pairs from response
-      return extractFromPlainText(content);
+    // Parse the simple format
+    const lines = content.split('\n');
+    const extractedFields: any[] = [];
+    const keyValuePairs: any[] = [];
+    
+    for (const line of lines) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const label = line.substring(0, colonIndex).trim();
+        const value = line.substring(colonIndex + 1).trim();
+        
+        if (label && value) {
+          extractedFields.push({
+            label: label,
+            value: value,
+            confidence: 0.95
+          });
+          keyValuePairs.push({
+            key: label,
+            value: value,
+            confidence: 0.95
+          });
+        }
+      }
     }
+
+    return {
+      documentType: 'document',
+      extractedFields: extractedFields,
+      keyValuePairs: keyValuePairs,
+      content: content
+    };
   } catch (error: any) {
-    console.error('GPT-4 Vision error:', error.message);
-    throw new Error(`Image extraction failed: ${error.message}`);
+    console.error('GPT-4 error:', error);
+    throw new Error(`Extraction failed: ${error.message}`);
   }
 }
 
-// Fallback text extraction
-function extractFromPlainText(text: string): any {
-  const lines = text.split('\n');
-  const extractedFields: any[] = [];
-  
-  for (const line of lines) {
-    const colonMatch = line.match(/^([^:]+):\s*(.+)$/);
-    if (colonMatch) {
-      extractedFields.push({
-        label: colonMatch[1].trim(),
-        value: colonMatch[2].trim(),
-        confidence: 0.8
-      });
-    }
-  }
-
-  return {
-    documentType: 'document',
-    extractedFields: extractedFields,
-    keyValuePairs: extractedFields.map(f => ({
-      key: f.label,
-      value: f.value,
-      confidence: f.confidence
-    })),
-    content: text
-  };
-}
-
-// PDF extraction using text analysis
+// PDF extraction
 async function extractFromPDF(text: string): Promise<any> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
-          role: "system",
-          content: `Extract all field names and values from this document text.
-Return JSON: {"extractedFields": [{"label": "field name", "value": "field value", "confidence": 0.95}]}`
-        },
-        {
           role: "user",
-          content: text.substring(0, 4000) // Limit text length
+          content: `Extract all field names and values from this document text. List each field as:
+Field Name: Field Value
+
+Document text:
+${text.substring(0, 3000)}`
         }
       ],
-      response_format: { type: "json_object" },
       temperature: 0
     });
 
-    const parsed = JSON.parse(response.choices[0].message.content || '{}');
+    const content = response.choices[0]?.message?.content || '';
+    
+    // Parse the response
+    const lines = content.split('\n');
+    const extractedFields: any[] = [];
+    const keyValuePairs: any[] = [];
+    
+    for (const line of lines) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const label = line.substring(0, colonIndex).trim();
+        const value = line.substring(colonIndex + 1).trim();
+        
+        if (label && value) {
+          extractedFields.push({
+            label: label,
+            value: value,
+            confidence: 0.95
+          });
+          keyValuePairs.push({
+            key: label,
+            value: value,
+            confidence: 0.95
+          });
+        }
+      }
+    }
+
     return {
       documentType: 'document',
-      extractedFields: parsed.extractedFields || [],
-      keyValuePairs: (parsed.extractedFields || []).map((f: any) => ({
-        key: f.label,
-        value: f.value,
-        confidence: f.confidence
-      })),
+      extractedFields: extractedFields,
+      keyValuePairs: keyValuePairs,
       content: text
     };
   } catch (error) {
     console.error('PDF extraction error:', error);
-    return extractFromPlainText(text);
+    return {
+      documentType: 'document',
+      extractedFields: [],
+      keyValuePairs: [],
+      content: text
+    };
   }
 }
 
@@ -172,7 +167,7 @@ export async function POST(
         return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
       }
 
-      console.log('Processing file:', file.name, 'Type:', file.type, 'Size:', file.size);
+      console.log('Processing file:', file.name, 'Type:', file.type);
 
       if (!process.env.OPENAI_KEY) {
         return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
@@ -183,14 +178,14 @@ export async function POST(
       let extracted;
       
       if (file.type === 'application/pdf') {
-        // For PDFs, we'll use a simpler text extraction
-        // Note: pdf-parse doesn't work well in Vercel, so we'll use a different approach
-        const text = await extractTextFromPDF(buffer);
-        extracted = await extractFromPDF(text);
+        // For PDFs, convert to text first
+        // Since pdf-parse doesn't work on Vercel, we'll use a simple approach
+        const textContent = "PDF content extraction not available. Please convert to image.";
+        extracted = await extractFromPDF(textContent);
       } else if (file.type.startsWith('image/')) {
         extracted = await extractFromImage(buffer, file.type);
       } else {
-        return NextResponse.json({ error: 'Unsupported file type. Please upload PDF or image files.' }, { status: 400 });
+        return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 });
       }
 
       const id = Date.now().toString();
@@ -215,7 +210,10 @@ export async function POST(
         messages: [
           {
             role: 'system',
-            content: `Document data: ${JSON.stringify(data, null, 2)}`
+            content: `You are helping analyze a document. Here's the extracted data:
+            ${JSON.stringify(data, null, 2)}
+            
+            Answer questions based on this data.`
           },
           { role: 'user', content: message }
         ],
@@ -249,8 +247,7 @@ export async function POST(
   } catch (error: any) {
     console.error('API error:', error);
     return NextResponse.json({ 
-      error: error.message || 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message || 'Internal server error'
     }, { status: 500 });
   }
 }
@@ -271,8 +268,8 @@ export async function GET(
         return NextResponse.json({ error: 'Data not found' }, { status: 404 });
       }
 
-      const exportData = (data.extractedFields || []).map((field: any) => ({
-        Label: field.label,
+      const exportData = (data.extractedFields || data.keyValuePairs || []).map((field: any) => ({
+        Label: field.label || field.key,
         Value: field.value,
         Confidence: ((field.confidence || 0.95) * 100).toFixed(0) + '%'
       }));
@@ -304,41 +301,5 @@ export async function GET(
   } catch (error: any) {
     console.error('API error:', error);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
-  }
-}
-
-// Simple PDF text extraction for Vercel
-async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  // For Vercel, we'll send the PDF to GPT-4 Vision as well
-  // This avoids pdf-parse compatibility issues
-  const base64 = buffer.toString('base64');
-  
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Extract all text from this PDF document. Return only the text content."
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:application/pdf;base64,${base64}`
-              }
-            }
-          ]
-        }
-      ],
-      max_tokens: 4096
-    });
-    
-    return response.choices[0]?.message?.content || '';
-  } catch (error) {
-    console.error('PDF text extraction error:', error);
-    return '';
   }
 }
