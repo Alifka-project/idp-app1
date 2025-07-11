@@ -8,8 +8,6 @@ import ChatPanel from './components/chat-panel';
 import { Button } from './components/ui/button';
 import { FileText, Download, MessageSquare } from 'lucide-react';
 
-type HighlightType = 'label' | 'value' | 'both';
-
 interface ExtractedField {
   label: string;
   value: string;
@@ -22,8 +20,8 @@ interface ExtractedField {
     width: number;
     height: number;
   };
-  // added so we can keep track of what part to highlight
-  highlightType?: HighlightType;
+  // track which part to highlight; default will be 'both'
+  highlightType?: 'label' | 'value' | 'both';
 }
 
 interface ExtractedData {
@@ -49,7 +47,7 @@ export default function Home() {
   const [highlightedField, setHighlightedField] = useState<ExtractedField | null>(null);
 
   const handleFilesSelected = (newFiles: File[]) => {
-    setFiles((prev) => [...prev, ...newFiles]);
+    setFiles(prev => [...prev, ...newFiles]);
     if (!selectedFile && newFiles.length > 0) {
       setSelectedFile(newFiles[0]);
     }
@@ -85,9 +83,10 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFieldClick = (field: ExtractedField, type: HighlightType) => {
-    setHighlightedField({ ...field, highlightType: type });
-    alert(`Selected ${type}: ${field.label} = ${field.value}`);
+  // now only takes the field, defaults highlightType to 'both'
+  const handleFieldClick = (field: ExtractedField) => {
+    setHighlightedField({ ...field, highlightType: 'both' });
+    alert(`Selected field: ${field.label} = ${field.value}`);
   };
 
   return (
@@ -108,7 +107,7 @@ export default function Home() {
           <Button variant="outline" onClick={() => handleDownload('xlsx')} disabled={!extractedData}>
             <Download className="w-4 h-4 mr-2" /> XLSX
           </Button>
-          <Button variant="outline" onClick={() => setShowChat((p) => !p)} disabled={!extractedData}>
+          <Button variant="outline" onClick={() => setShowChat(p => !p)} disabled={!extractedData}>
             <MessageSquare className="w-4 h-4 mr-2" /> Ask Doc
           </Button>
         </div>
@@ -116,7 +115,7 @@ export default function Home() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
+        {/* Thumbnails sidebar */}
         <div className="w-48 border-r p-4 overflow-y-auto bg-gray-50">
           <h3 className="text-sm font-semibold mb-3">Documents</h3>
           {files.map((file, idx) => (
