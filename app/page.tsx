@@ -90,8 +90,15 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFieldClick = (field: ExtractedField) => {
-    setHighlightedField(field);
+  const handleFieldClick = (field: any, type: 'label' | 'value' | 'both') => {
+    // Simple highlighting by setting the field
+    setHighlightedField({
+      ...field,
+      highlightType: type
+    });
+    
+    // Show alert with field info (since we can't highlight without coordinates)
+    alert(`Selected ${type}: ${field.label} = ${field.value}`);
   };
 
   return (
