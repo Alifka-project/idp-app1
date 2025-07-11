@@ -8,6 +8,8 @@ import ChatPanel from './components/chat-panel';
 import { Button } from './components/ui/button';
 import { FileText, Download, MessageSquare } from 'lucide-react';
 
+type HighlightType = 'label' | 'value' | 'both';
+
 interface ExtractedField {
   label: string;
   value: string;
@@ -20,6 +22,8 @@ interface ExtractedField {
     width: number;
     height: number;
   };
+  // added so we can keep track of what part to highlight
+  highlightType?: HighlightType;
 }
 
 interface ExtractedData {
@@ -45,7 +49,7 @@ export default function Home() {
   const [highlightedField, setHighlightedField] = useState<ExtractedField | null>(null);
 
   const handleFilesSelected = (newFiles: File[]) => {
-    setFiles([...files, ...newFiles]);
+    setFiles((prev) => [...prev, ...newFiles]);
     if (!selectedFile && newFiles.length > 0) {
       setSelectedFile(newFiles[0]);
     }
@@ -53,25 +57,17 @@ export default function Home() {
 
   const handleExtract = async () => {
     if (!selectedFile) return;
-    
     setLoading(true);
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    
     try {
-      const res = await fetch('/api/extract', {
-        method: 'POST',
-        body: formData,
-      });
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const res = await fetch('/api/extract', { method: 'POST', body: formData });
       const data = await res.json();
-      if (res.ok) {
-        setExtractedData(data);
-      } else {
-        alert(data.error || 'Extraction failed');
-      }
-    } catch (error) {
-      console.error('Extraction failed:', error);
-      alert('Failed to extract document');
+      if (!res.ok) throw new Error(data.error || 'Extraction failed');
+      setExtractedData(data);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Failed to extract document');
     } finally {
       setLoading(false);
     }
@@ -79,7 +75,6 @@ export default function Home() {
 
   const handleDownload = async (format: 'csv' | 'xlsx') => {
     if (!extractedData) return;
-    
     const res = await fetch(`/api/download/${extractedData.id}/${format}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -90,14 +85,8 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFieldClick = (field: any, type: 'label' | 'value' | 'both') => {
-    // Simple highlighting by setting the field
-    setHighlightedField({
-      ...field,
-      highlightType: type
-    });
-    
-    // Show alert with field info (since we can't highlight without coordinates)
+  const handleFieldClick = (field: ExtractedField, type: HighlightType) => {
+    setHighlightedField({ ...field, highlightType: type });
     alert(`Selected ${type}: ${field.label} = ${field.value}`);
   };
 
@@ -106,8 +95,7 @@ export default function Home() {
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b px-4 py-3 flex items-center justify-between shadow-sm">
         <h1 className="text-xl font-semibold flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          IDP App (OpenAI)
+          <FileText className="w-5 h-5" /> IDP App (OpenAI)
         </h1>
         <div className="flex items-center gap-3">
           <FileUpload onFilesSelected={handleFilesSelected} />
@@ -115,32 +103,29 @@ export default function Home() {
             {loading ? 'Extracting...' : 'Extract'}
           </Button>
           <Button variant="outline" onClick={() => handleDownload('csv')} disabled={!extractedData}>
-            <Download className="w-4 h-4 mr-2" />
-            CSV
+            <Download className="w-4 h-4 mr-2" /> CSV
           </Button>
           <Button variant="outline" onClick={() => handleDownload('xlsx')} disabled={!extractedData}>
-            <Download className="w-4 h-4 mr-2" />
-            XLSX
+            <Download className="w-4 h-4 mr-2" /> XLSX
           </Button>
-          <Button variant="outline" onClick={() => setShowChat(!showChat)} disabled={!extractedData}>
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Ask Doc
+          <Button variant="outline" onClick={() => setShowChat((p) => !p)} disabled={!extractedData}>
+            <MessageSquare className="w-4 h-4 mr-2" /> Ask Doc
           </Button>
         </div>
       </nav>
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Thumbnails sidebar */}
+        {/* Sidebar */}
         <div className="w-48 border-r p-4 overflow-y-auto bg-gray-50">
           <h3 className="text-sm font-semibold mb-3">Documents</h3>
           {files.map((file, idx) => (
             <div
               key={idx}
+              onClick={() => setSelectedFile(file)}
               className={`mb-2 p-2 border rounded cursor-pointer hover:bg-white transition-colors ${
                 selectedFile === file ? 'border-blue-500 bg-white shadow-sm' : 'border-gray-200'
               }`}
-              onClick={() => setSelectedFile(file)}
             >
               <div className="text-xs truncate font-medium">{file.name}</div>
               <div className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</div>
@@ -150,17 +135,14 @@ export default function Home() {
 
         {/* Split view */}
         <div className="flex-1 flex">
-          {/* Left: Fixed Document viewer */}
+          {/* Document viewer */}
           <div className="w-1/2 border-r flex flex-col bg-gray-50">
             <div className="p-2 border-b bg-white">
               <span className="text-sm font-medium text-gray-700">Original Document</span>
             </div>
             <div className="flex-1 overflow-hidden">
               {selectedFile ? (
-                <DocumentViewer 
-                  file={selectedFile} 
-                  highlightedField={highlightedField}
-                />
+                <DocumentViewer file={selectedFile} highlightedField={highlightedField} />
               ) : (
                 <div className="h-full flex items-center justify-center text-gray-400">
                   Upload a document to begin
@@ -169,7 +151,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right: Scrollable Extraction form */}
+          {/* Extraction form */}
           <div className="w-1/2 flex flex-col">
             <div className="p-2 border-b bg-white">
               <span className="text-sm font-medium text-gray-700">
@@ -183,8 +165,8 @@ export default function Home() {
             </div>
             <div className="flex-1 overflow-y-auto">
               {extractedData ? (
-                <ExtractionForm 
-                  data={extractedData} 
+                <ExtractionForm
+                  data={extractedData}
                   onUpdate={setExtractedData}
                   onFieldClick={handleFieldClick}
                 />
@@ -199,10 +181,7 @@ export default function Home() {
 
         {/* Chat panel */}
         {showChat && extractedData && (
-          <ChatPanel 
-            extractedDataId={extractedData.id} 
-            onClose={() => setShowChat(false)} 
-          />
+          <ChatPanel extractedDataId={extractedData.id} onClose={() => setShowChat(false)} />
         )}
       </div>
     </div>
