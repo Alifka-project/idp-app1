@@ -32,6 +32,7 @@ interface ExtractionFormProps {
 
 export default function ExtractionForm({ data, onUpdate, onFieldClick }: ExtractionFormProps) {
   const [formData, setFormData] = useState(data.data.extractedFields);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 
   const handleChange = (index: number, field: 'label' | 'value', value: string) => {
     const updated = [...formData];
@@ -145,6 +146,55 @@ export default function ExtractionForm({ data, onUpdate, onFieldClick }: Extract
             No fields extracted
           </div>
         )}
+
+        {formData.map((item, idx) => (
+          <div
+            key={idx}
+            className={`border rounded-lg p-4 bg-white transition-all cursor-pointer ${
+              highlightedIndex === idx
+                ? 'shadow-lg border-blue-500 bg-blue-50'
+                : 'hover:shadow-md hover:bg-gray-50'
+            }`}
+            onClick={() => {
+              setHighlightedIndex(idx);
+              onFieldClick?.(item);
+            }}
+          >
+            {/* Remove the "Click to highlight" text and Target icons */}
+            <div className="flex items-start gap-2 mb-3">
+              {getTypeIcon(item.type)}
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-600 mb-1">Label</div>
+                <Input
+                  value={item.label || ''}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleChange(idx, 'label', e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-medium"
+                />
+              </div>
+            </div>
+            
+            <div className="mb-3">
+              <div className="text-sm font-medium text-gray-600 mb-1">Value</div>
+              <Input
+                value={item.value || ''}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleChange(idx, 'value', e.target.value);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="text-xs text-gray-500">
+              Confidence: {(item.confidence * 100).toFixed(0)}%
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tables */}

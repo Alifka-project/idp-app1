@@ -83,12 +83,20 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  // now only takes the field, defaults highlightType to 'both'
   const handleFieldClick = (field: ExtractedField) => {
-    setHighlightedField({ ...field, highlightType: 'both' });
-    alert(`Selected field: ${field.label} = ${field.value}`);
-  };
+    // Set the highlighted field to trigger highlighting in the viewer
+    setHighlightedField({
+      ...field,
+      highlightType: field.highlightType || 'both', // Default to 'both' if not provided
+    });
 
+    // For PDFs, we can try to search for the text in the iframe
+    if (selectedFile?.type === 'application/pdf') {
+      // Note: Due to browser security, we can't directly control PDF viewer search
+      // But we can show which field is selected
+      console.log(`Selected field:`, field.label, '=', field.value);
+    }
+  };
   return (
     <div className="h-screen flex flex-col">
       {/* Navbar */}
